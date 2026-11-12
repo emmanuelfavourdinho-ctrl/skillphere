@@ -1,0 +1,328 @@
+// Prisma schema for TrustTrade.
+// Production database is PostgreSQL; local development can use Docker Compose.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  ARTISAN
+  ADMIN
+  MODERATOR
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum VerificationType {
+  IDENTITY
+  SKILL
+  BUSINESS
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  BUSY
+  UNAVAILABLE
+}
+
+enum ServiceUrgency {
+  LOW
+  MEDIUM
+  HIGH
+  ASAP
+}
+
+enum JobStatus {
+  PENDING
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum EndorsementStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id                String        @id @default(cuid())
+  email             String        @unique
+  phone             String?       @unique
+  passwordHash      String
+  firstName         String
+  lastName          String
+  role              Role          @default(CUSTOMER)
+  accountStatus     AccountStatus  @default(ACTIVE)
+  emailVerifiedAt   DateTime?
+  phoneVerifiedAt   DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  artisanProfile    ArtisanProfile?
+  serviceRequests   ServiceRequest[] @relation("CustomerServiceRequests")
+  jobsAsCustomer    Job[]            @relation("CustomerJobs")
+  jobsAsArtisan     Job[]            @relation("ArtisanJobs")
+  reviewsWritten    Review[]         @relation("CustomerReviews")
+  reviewsReceived   Review[]         @relation("ArtisanReviews")
+  endorsementsGiven Endorsement[]    @relation("Endorser")
+  leadReports       Report[]         @relation("Reporter")
+  auditLogs         AuditLog[]      @relation("Actor")
+
+  @@index([email])
+  @@index([role])
+  @@index([accountStatus])
+}
+
+model ArtisanProfile {
+  id                 String              @id @default(cuid())
+  userId             String              @unique
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessName       String?
+  bio                String?
+  profileImage       String?
+  experienceYears    Int?
+  generalLocation    String?
+  region             String?
+  city               String?
+  neighborhood       String?
+  latitude           Float?
+  longitude          Float?
+  availabilityStatus AvailabilityStatus @default(AVAILABLE)
+  profileCompleteness Float               @default(0)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  skills             ArtisanSkill[]
+  portfolioItems     PortfolioItem[]
+  verifications      Verification[]
+  endorsements       Endorsement[]
+  availabilitySlots  ArtisanAvailability[]
+  jobs              Job[]              @relation("ArtisanJobsProfile")
+  reviewsReceived    Review[]           @relation("ArtisanReviewsProfile")
+
+  @@index([availabilityStatus])
+  @@index([city])
+  @@index([region])
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  icon        String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  skills      Skill[]
+  requests    ServiceRequest[]
+}
+
+model Skill {
+  id          String        @id @default(cuid())
+  categoryId  String
+  category    Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  name        String
+  slug        String        @unique
+  description String?
+  createdAt   DateTime      @default(now())
+
+  artisanLinks ArtisanSkill[]
+  requests     ServiceRequest[]
+
+  @@index([categoryId])
+  @@index([name])
+}
+
+model ArtisanSkill {
+  id                  String   @id @default(cuid())
+  artisanProfileId    String
+  artisanProfile      ArtisanProfile @relation(fields: [artisanProfileId], references: [id], onDelete: Cascade)
+  skillId             String
+  skill               Skill    @relation(fields: [skillId], references: [id], onDelete: Restrict)
+  proficiencyLevel    String?
+  yearsOfExperience   Int?
+  verificationStatus  VerificationStatus @default(PENDING)
+  createdAt           DateTime @default(now())
+
+  @@unique([artisanProfileId, skillId])
+  @@index([artisanProfileId])
+  @@index([skillId])
+}
+
+model PortfolioItem {
+  id              String     @id @default(cuid())
+  artisanProfileId String     
+  artisanProfile   ArtisanProfile @relation(fields: [artisanProfileId], references: [id], onDelete: Cascade)
+  title           String
+  description     String?
+  imageUrl        String?
+  projectDate     DateTime?
+  createdAt       DateTime   @default(now())
+
+  @@index([artisanProfileId])
+}
+
+model Verification {
+  id               String             @id @default(cuid())
+  artisanProfileId String
+  artisanProfile   ArtisanProfile     @relation(fields: [artisanProfileId], references: [id], onDelete: Cascade)
+  verificationType VerificationType
+  status           VerificationStatus @default(PENDING)
+  submittedAt      DateTime           @default(now())
+  reviewedAt       DateTime?
+  reviewedBy       String?
+  rejectionReason  String?
+  evidenceReference String?
+
+  @@index([artisanProfileId])
+  @@index([status])
+}
+
+model ServiceRequest {
+  id          String         @id @default(cuid())
+  customerId  String
+  customer    User           @relation("CustomerServiceRequests", fields: [customerId], references: [id], onDelete: Cascade)
+  categoryId  String
+  category    Category       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  skillId     String
+  skill       Skill          @relation(fields: [skillId], references: [id], onDelete: Restrict)
+  title       String
+  description String
+  location    String?
+  budgetMin   Float?
+  budgetMax   Float?
+  urgency     ServiceUrgency @default(MEDIUM)
+  status      String         @default("OPEN")
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  jobs        Job[]
+
+  @@index([customerId])
+  @@index([categoryId])
+  @@index([skillId])
+  @@index([status])
+}
+
+model Job {
+  id             String       @id @default(cuid())
+  serviceRequestId String
+  serviceRequest  ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Restrict)
+  customerId     String
+  customer       User          @relation("CustomerJobs", fields: [customerId], references: [id], onDelete: Restrict)
+  artisanId      String
+  artisanUser    User          @relation("ArtisanJobs", fields: [artisanId], references: [id], onDelete: Restrict)
+  artisanProfileId String?
+  artisanProfile ArtisanProfile? @relation("ArtisanJobsProfile", fields: [artisanProfileId], references: [id], onDelete: SetNull)
+  agreedPrice    Float?
+  status         JobStatus     @default(PENDING)
+  acceptedAt     DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  reviews        Review[]
+
+  @@index([customerId])
+  @@index([artisanId])
+  @@index([status])
+}
+
+model Review {
+  id          String   @id @default(cuid())
+  jobId       String
+  job         Job      @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  customerId  String
+  customer    User     @relation("CustomerReviews", fields: [customerId], references: [id], onDelete: Restrict)
+  artisanId   String
+  artisan     User     @relation("ArtisanReviews", fields: [artisanId], references: [id], onDelete: Restrict)
+  artisanProfileId String?
+  artisanProfile ArtisanProfile? @relation("ArtisanReviewsProfile", fields: [artisanProfileId], references: [id], onDelete: SetNull)
+  rating      Int
+  comment     String?
+  createdAt   DateTime @default(now())
+
+  @@unique([jobId])
+  @@index([artisanId])
+  @@index([customerId])
+}
+
+model Endorsement {
+  id              String             @id @default(cuid())
+  artisanProfileId String
+  artisanProfile   ArtisanProfile     @relation(fields: [artisanProfileId], references: [id], onDelete: Cascade)
+  endorserId      String
+  endorser        User               @relation("Endorser", fields: [endorserId], references: [id], onDelete: Cascade)
+  relationship    String?
+  message         String?
+  status          EndorsementStatus @default(PENDING)
+  createdAt       DateTime           @default(now())
+
+  @@index([artisanProfileId])
+  @@index([endorserId])
+}
+
+model ArtisanAvailability {
+  id              String            @id @default(cuid())
+  artisanProfileId String
+  artisanProfile   ArtisanProfile    @relation(fields: [artisanProfileId], references: [id], onDelete: Cascade)
+  dayOfWeek       Int
+  startTime       String
+  endTime         String
+  isAvailable     Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+
+  @@index([artisanProfileId, dayOfWeek])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorId     String?
+  actor       User?    @relation("Actor", fields: [actorId], references: [id], onDelete: SetNull)
+  action      String
+  resourceType String
+  resourceId  String
+  metadata    Json?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  @@index([actorId])
+  @@index([resourceType, resourceId])
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  reporterId   String
+  reporter    User     @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  targetType  String
+  targetId    String
+  reason      String
+  description String?
+  status      String   @default("OPEN")
+  createdAt   DateTime @default(now())
+
+  @@index([reporterId])
+  @@index([status])
+}

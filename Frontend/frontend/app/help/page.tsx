@@ -1,0 +1,1 @@
+import Link from 'next/link';export default function Page(){return <main className="placeholder"><Link href="/" className="back">← Back to TrustTrade</Link><span className="eyebrow">TRUSTTRADE</span><h1>Help</h1><p>This page is being prepared as part of the TrustTrade MVP. No service or policy claims are made here yet.</p></main>}
